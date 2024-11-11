@@ -1,72 +1,57 @@
-// routes/contractRoutes.js
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const crypto = require('node:crypto'); // Import crypto module correctly
+const AWS = require('aws-sdk');
+const crypto = require('crypto');
 const { authMiddleware } = require('../middleware/auth');
 const Contract = require('../Models/Contract');
 const { sendContractEmail } = require('../utils/emailService');
-const { PDFDocument } = require('pdf-lib');
-const sharp = require('sharp');
 
+// Configure AWS
+const s3 = new AWS.S3({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: process.env.AWS_REGION
+});
 
-// Ensure uploads directory exists
-const fs = require('fs');
-const uploadsDir = 'uploads';
-if (!fs.existsSync(uploadsDir)){
-    fs.mkdirSync(uploadsDir);
-}
-
-// // Configure multer storage
-// const storage = multer.diskStorage({
-//     destination: (req, file, cb) => {
-//         cb(null, 'uploads/');
-//     },
-//     filename: (req, file, cb) => {
-//         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-//         cb(null, uniqueSuffix + path.extname(file.originalname));
-//     }
-// });
-
-// const upload = multer({
-//     storage,
-//     fileFilter: (req, file, cb) => {
-//         if (file.mimetype === 'application/pdf') {
-//             cb(null, true);
-//         } else {
-//             cb(new Error('Only PDF files are allowed!'), false);
-//         }
-//     },
-//     limits: {
-//         fileSize: 5 * 1024 * 1024 // 5MB limit
-//     }
-// });
-
-// Ensure uploads directory exists
-const uploadDir = 'uploads';
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
-
-// Configure multer for base64 data
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/');
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only PDF files are allowed!'), false);
+        }
     }
 });
 
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
-});
+// Helper function to upload to S3
+const uploadToS3 = async (file, folder = 'contracts') => {
+    try {
+        const fileExtension = file.originalname ? path.extname(file.originalname) : '.pdf';
+        const filename = `${folder}/${Date.now()}-${crypto.randomBytes(16).toString('hex')}${fileExtension}`;
+        
+        const params = {
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: filename,
+            Body: file.buffer || Buffer.from(file, 'base64'),
+            ContentType: file.mimetype || 'application/pdf',
+            // Remove ACL setting
+        };
 
-
-
+        console.log('Uploading to S3:', { bucket: params.Bucket, key: params.Key });
+        const uploadResult = await s3.upload(params).promise();
+        console.log('S3 upload successful:', uploadResult.Location);
+        return uploadResult.Location;
+    } catch (error) {
+        console.error('S3 upload error:', error);
+        throw new Error(`Failed to upload to S3: ${error.message}`);
+    }
+};
 
 // Create contract
 router.post('/', authMiddleware, upload.single('pdf'), async (req, res) => {
@@ -79,49 +64,42 @@ router.post('/', authMiddleware, upload.single('pdf'), async (req, res) => {
             return res.status(400).json({ message: 'No PDF file uploaded' });
         }
 
-        const { title, description, expiryDate, recipientEmail } = req.body;
-        
-        // Generate signing key
+        // Upload file to S3
+        const fileUrl = await uploadToS3(req.file);
+        console.log('File uploaded to S3:', fileUrl);
+
+        const { title, description, expiryDate, recipientEmail, requirePayment } = req.body;
         const signingKey = crypto.randomBytes(16).toString('hex');
 
         const contract = await Contract.create({
             title,
             description,
             createdBy: req.user.id,
-            originalPdfUrl: `/uploads/${req.file.filename}`,
+            originalPdfUrl: fileUrl,
             expiryDate: new Date(expiryDate),
             recipientEmail,
-            signingKey
+            signingKey,
+            requirePayment: requirePayment === 'true'
         });
 
-        // Generate signing link
         const signingLink = `${process.env.FRONTEND_URL}/sign/${signingKey}`;
 
-        // Send email to recipient
         try {
             await sendContractEmail(recipientEmail, title, signingLink);
             console.log('Email sent successfully');
         } catch (emailError) {
             console.error('Failed to send email:', emailError);
-            // Don't fail the request if email fails, but log it
         }
 
         res.status(201).json(contract);
     } catch (error) {
         console.error('Contract creation error:', error);
-        
-        // Clean up uploaded file if contract creation fails
-        if (req.file) {
-            fs.unlink(req.file.path, (unlinkError) => {
-                if (unlinkError) {
-                    console.error('Error deleting file:', unlinkError);
-                }
-            });
-        }
-        
         res.status(500).json({ message: 'Error creating contract', error: error.message });
     }
 });
+
+
+
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
@@ -173,12 +151,9 @@ router.get('/sign/:signingKey', async (req, res) => {
         res.status(500).json({ message: 'Error fetching contract' });
     }
 });
-
 // Handle contract signing
 router.post('/sign/:signingKey', async (req, res) => {
     try {
-        console.log('Received signing request for:', req.params.signingKey);
-        
         const contract = await Contract.findOne({
             signingKey: req.params.signingKey,
             status: 'pending',
@@ -194,28 +169,24 @@ router.post('/sign/:signingKey', async (req, res) => {
             return res.status(400).json({ message: 'No signature provided' });
         }
 
-        // Extract the base64 data (remove data URL prefix)
+        // Upload signature to S3
         const base64Data = signatureData.replace(/^data:image\/png;base64,/, '');
+        const signatureUrl = await uploadToS3({
+            buffer: Buffer.from(base64Data, 'base64'),
+            mimetype: 'image/png',
+            originalname: 'signature.png'
+        }, 'signatures');
 
-        // Create signature filename
-        const signatureFileName = `signature-${Date.now()}.png`;
-        const signaturePath = path.join(uploadDir, signatureFileName);
-
-        // Save signature file
-        fs.writeFileSync(signaturePath, base64Data, 'base64');
-
-        // Update contract with signature path and status
-        contract.signedPdfUrl = `/${signaturePath}`;
+        // Update contract with signature URL and status
+        contract.signedPdfUrl = signatureUrl;
         contract.status = 'signed';
         contract.signedAt = new Date();
         await contract.save();
 
-        // Send success response
         res.json({
             message: 'Contract signed successfully',
             signedPdfUrl: contract.signedPdfUrl
         });
-
     } catch (error) {
         console.error('Error signing contract:', error);
         res.status(500).json({ 
@@ -353,27 +324,14 @@ router.get('/download/:id/:signingKey', async (req, res) => {
             return res.status(404).json({ message: 'Contract not found' });
         }
 
-        // Get the correct file path
-        const filePath = path.join(__dirname, '..', contract.signedPdfUrl || contract.originalPdfUrl);
-        
-        // Check if file exists
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ message: 'File not found' });
-        }
-
-        // Set proper headers for PDF download
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename=' + path.basename(filePath));
-        
-        // Stream the file instead of reading it all at once
-        const fileStream = fs.createReadStream(filePath);
-        fileStream.pipe(res);
-
+        const fileUrl = contract.signedPdfUrl || contract.originalPdfUrl;
+        res.redirect(fileUrl);
     } catch (error) {
         console.error('Download error:', error);
         res.status(500).json({ message: 'Error downloading file' });
     }
 });
+
 
 // Preview route
 router.get('/preview/:id/:signingKey', async (req, res) => {
@@ -387,20 +345,8 @@ router.get('/preview/:id/:signingKey', async (req, res) => {
             return res.status(404).json({ message: 'Contract not found' });
         }
 
-        const filePath = path.join(__dirname, '..', contract.signedPdfUrl || contract.originalPdfUrl);
-        
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ message: 'File not found' });
-        }
-
-        // Set headers for inline viewing
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'inline; filename=' + path.basename(filePath));
-        
-        // Stream the file
-        const fileStream = fs.createReadStream(filePath);
-        fileStream.pipe(res);
-
+        const fileUrl = contract.signedPdfUrl || contract.originalPdfUrl;
+        res.redirect(fileUrl);
     } catch (error) {
         console.error('Preview error:', error);
         res.status(500).json({ message: 'Error previewing file' });
