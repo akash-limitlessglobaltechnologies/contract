@@ -3,7 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
-const session = require('express-session');
+const expressSession = require('express-session'); // Fixed import
 const passport = require('./config/passport');
 const fs = require('fs');
 
@@ -46,8 +46,8 @@ app.use(cors({
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Session configuration
-app.use(session({
+// Session configuration - Fixed session middleware
+app.use(expressSession({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
