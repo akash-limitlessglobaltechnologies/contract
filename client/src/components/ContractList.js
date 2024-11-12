@@ -20,7 +20,7 @@ function ContractList() {
                 throw new Error('No authentication token found');
             }
 
-            const response = await fetch('http://localhost:5001/api/contracts', {
+            const response = await fetch(`${process.env.REACT_APP_API_URL}/api/contracts`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -50,7 +50,7 @@ function ContractList() {
     const handleDownload = async (contractId, signingKey) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:5001/api/contracts/download/${contractId}/${signingKey}`, {
+            const response = await fetch(`${process.env.REACT_APP_API_URL}/api/contracts/download/${contractId}/${signingKey}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }

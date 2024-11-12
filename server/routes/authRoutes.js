@@ -13,16 +13,16 @@ router.get('/google',
 
 router.get('/google/callback',
     passport.authenticate('google', { 
-        failureRedirect: 'http://localhost:3000/login?error=auth_failed',
+        failureRedirect: `${process.env.FRONTEND_URL}/login?error=auth_failed`,
         session: false 
     }),
     async (req, res) => {
         try {
             const token = userController.generateToken(req.user);
-            res.redirect(`http://localhost:3000/google-callback?token=${token}`);
+            res.redirect(`${process.env.FRONTEND_URL}/google-callback?token=${token}`);
         } catch (error) {
             console.error('Callback error:', error);
-            res.redirect('http://localhost:3000/login?error=auth_failed');
+            res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
         }
     }
 );

@@ -49,7 +49,7 @@ function ContractForm() {
             throw new Error('No authentication token found');
         }
 
-        const response = await fetch('http://localhost:5001/api/contracts', {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/contracts`, {
             method: 'POST',
             body: data,
             headers: {

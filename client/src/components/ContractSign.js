@@ -13,7 +13,7 @@ import PaymentWrapper from "./PaymentForm";
 import axios from 'axios';
 
 // Configure API URL from environment variable
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+const API_URL = process.env.REACT_APP_API_URL || `http://localhost:5001`;
 
 function ContractSign() {
     const [contract, setContract] = useState(null);
@@ -42,7 +42,7 @@ function ContractSign() {
     const fetchContract = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${API_URL}/api/contracts/sign/${signingKey}`);
+            const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/contracts/sign/${signingKey}`);
             const data = response.data;
 
             // Check contract status
@@ -71,7 +71,7 @@ function ContractSign() {
         try {
             setDownloadProgress(0);
             const response = await axios.get(
-                `${API_URL}/api/contracts/download/${contract._id}/${contract.signingKey}`,
+                `${process.env.REACT_APP_API_URL}/api/contracts/download/${contract._id}/${contract.signingKey}`,
                 {
                     responseType: 'blob',
                     onDownloadProgress: (progressEvent) => {
@@ -102,7 +102,7 @@ function ContractSign() {
 
     const handlePreview = () => {
         if (!contract) return;
-        window.open(`${API_URL}/api/contracts/preview/${contract._id}/${contract.signingKey}`, '_blank');
+        window.open(`${process.env.REACT_APP_API_URL}/api/contracts/preview/${contract._id}/${contract.signingKey}`, '_blank');
     };
 
     const handleClear = () => {

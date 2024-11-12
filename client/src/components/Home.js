@@ -15,7 +15,7 @@ function Home() {
 
     const handleLogout = async () => {
         try {
-            await fetch('http://localhost:5001/api/logout', {
+            await fetch(`${process.env.REACT_APP_API_URL}/api/logout`, {
                 credentials: 'include'
             });
             logout();

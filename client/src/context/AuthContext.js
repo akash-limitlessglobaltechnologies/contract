@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
     const logout = useCallback(async () => {
         try {
             const token = localStorage.getItem('token');
-            await fetch('http://localhost:5001/api/logout', {
+            await fetch('https://contract-backend-lthz.vercel.app/api/logout', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`

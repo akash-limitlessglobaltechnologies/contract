@@ -15,7 +15,7 @@ function Login() {
 
     const handleGoogleLogin = () => {
         // Updated URL to use the new auth route
-        window.location.href = 'http://localhost:5001/auth/google';
+        window.location.href = `${process.env.REACT_APP_API_URL}/auth/google`;
     };
 
     return (

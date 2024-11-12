@@ -29,7 +29,7 @@ function ContractView() {
       }.pdf`;
 
       const response = await fetch(
-        `http://localhost:5001/api/contracts/download/${contract._id}/${contract.signingKey}`,
+        `${process.env.REACT_APP_API_URL}/api/contracts/download/${contract._id}/${contract.signingKey}`,
         {
           method: "GET",
           headers: {
@@ -70,7 +70,7 @@ function ContractView() {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `http://localhost:5001/api/contracts/preview/${contract._id}/${contract.signingKey}`,
+        `${process.env.REACT_APP_API_URL}/api/contracts/preview/${contract._id}/${contract.signingKey}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -107,7 +107,7 @@ function ContractView() {
       }
 
       const response = await fetch(
-        `http://localhost:5001/api/contracts/${id}`,
+        `${process.env.REACT_APP_API_URL}/api/contracts/${id}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -130,11 +130,11 @@ function ContractView() {
   };
 
   const getDownloadUrl = (contract) => {
-    return `http://localhost:5001/api/contracts/download/${contract._id}/${contract.signingKey}`;
+    return `${process.env.REACT_APP_API_URL}/api/contracts/download/${contract._id}/${contract.signingKey}`;
   };
 
   const getPreviewUrl = (contract) => {
-    return `http://localhost:5001/api/contracts/preview/${contract._id}/${contract.signingKey}`;
+    return `${process.env.REACT_APP_API_URL}/api/contracts/preview/${contract._id}/${contract.signingKey}`;
   };
 
   const getSigningLink = (contract) => {

@@ -19,7 +19,7 @@ function GoogleCallback() {
             }
 
             try {
-                const response = await fetch('http://localhost:5001/api/profile', {
+                const response = await fetch(`${process.env.REACT_APP_API_URL}/api/profile`, {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
